@@ -1,3 +1,12 @@
+#[derive(Debug, serde::Serialize)]
+struct GameStats {
+    turns: usize,
+    hits: usize,
+    misses: usize,
+    ships_left: usize,
+    total_ships: usize,
+}
+
 use rand::seq::IndexedRandom;
 
 use eframe::egui;
@@ -36,6 +45,7 @@ struct BattleshipGame {
     play_again: bool,
     rows: usize,
     cols: usize,
+    turns: usize,
 }
 
 impl BattleshipGame {
@@ -49,12 +59,14 @@ impl BattleshipGame {
             play_again: false,
             rows,
             cols,
+            turns: 0,
         };
         game.start_game(rows, cols);
         game
     }
 
     fn start_game(&mut self, rows: usize, cols: usize) {
+        self.turns = 0;
         self.rows = rows;
         self.cols = cols;
         self.board = vec![vec![Cell::Empty; cols]; rows];
@@ -101,6 +113,7 @@ impl BattleshipGame {
     }
 
     fn shoot(&mut self, row: usize, col: usize) {
+        self.turns += 1;
         if self.game_over || self.shots[row][col] != Shot::Untargeted {
             return;
         }
@@ -125,6 +138,27 @@ impl BattleshipGame {
             self.game_over = true;
             self.message = "Congratulations! You sunk all the ships!".to_owned();
             self.play_again = true;
+        }
+    }
+
+    fn game_stats(&self) -> GameStats {
+        let mut hits = 0;
+        let mut misses = 0;
+        for row in &self.shots {
+            for &cell in row {
+                match cell {
+                    Shot::Hit => hits += 1,
+                    Shot::Miss => misses += 1,
+                    _ => {}
+                }
+            }
+        }
+        GameStats {
+            turns: self.turns,
+            hits,
+            misses,
+            ships_left: self.ships.iter().filter(|s| !s.sunk).count(),
+            total_ships: self.ships.len(),
         }
     }
 }
@@ -173,6 +207,12 @@ impl eframe::App for BattleshipApp {
             });
             ui.separator();
 
+            // Board size controls and Start New Game button
+            ui.separator();
+            // Show game stats
+            let stats = self.game.game_stats();
+            ui.label(format!("Turns: {} | Hits: {} | Misses: {} | Ships left: {}/{}", stats.turns, stats.hits, stats.misses, stats.ships_left, stats.total_ships));
+            ui.separator();
             // Board display
             egui::Grid::new("board_grid").spacing([8.0, 8.0]).show(ui, |ui| {
                 ui.label("");

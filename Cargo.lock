@@ -410,6 +410,7 @@ dependencies = [
  "eframe",
  "egui",
  "rand",
+ "serde",
 ]
 
 [[package]]
