@@ -4,7 +4,6 @@ use eframe::egui;
 use rand::seq::SliceRandom;
 use rand::Rng;
 
-const BOARD_SIZE: usize = 8;
 const SHIPS: [(&str, usize); 3] = [("Destroyer", 2), ("Cruiser", 3), ("Battleship", 4)];
 
 #[derive(Clone, Copy, PartialEq)]
@@ -29,31 +28,37 @@ struct Ship {
 }
 
 struct BattleshipGame {
-    board: [[Cell; BOARD_SIZE]; BOARD_SIZE],
-    shots: [[Shot; BOARD_SIZE]; BOARD_SIZE],
+    board: Vec<Vec<Cell>>,
+    shots: Vec<Vec<Shot>>,
     ships: Vec<Ship>,
     game_over: bool,
     message: String,
     play_again: bool,
+    rows: usize,
+    cols: usize,
 }
 
 impl BattleshipGame {
-    fn new() -> Self {
+    fn new(rows: usize, cols: usize) -> Self {
         let mut game = BattleshipGame {
-            board: [[Cell::Empty; BOARD_SIZE]; BOARD_SIZE],
-            shots: [[Shot::Untargeted; BOARD_SIZE]; BOARD_SIZE],
+            board: vec![vec![Cell::Empty; cols]; rows],
+            shots: vec![vec![Shot::Untargeted; cols]; rows],
             ships: vec![],
             game_over: false,
             message: "Welcome to Battleship!".to_owned(),
             play_again: false,
+            rows,
+            cols,
         };
-        game.start_game();
+        game.start_game(rows, cols);
         game
     }
 
-    fn start_game(&mut self) {
-        self.board = [[Cell::Empty; BOARD_SIZE]; BOARD_SIZE];
-        self.shots = [[Shot::Untargeted; BOARD_SIZE]; BOARD_SIZE];
+    fn start_game(&mut self, rows: usize, cols: usize) {
+        self.rows = rows;
+        self.cols = cols;
+        self.board = vec![vec![Cell::Empty; cols]; rows];
+        self.shots = vec![vec![Shot::Untargeted; cols]; rows];
         self.ships.clear();
         self.game_over = false;
         self.message = "Game started!".to_owned();
@@ -63,8 +68,8 @@ impl BattleshipGame {
             'place: loop {
                 let dir = *[true, false].choose(&mut rng).unwrap(); // true: horizontal, false: vertical
                 let (row, col) = (
-                    rng.gen_range(0..BOARD_SIZE),
-                    rng.gen_range(0..BOARD_SIZE),
+                    rng.gen_range(0..rows),
+                    rng.gen_range(0..cols),
                 );
                 let mut positions = vec![];
                 for i in 0..*length {
@@ -73,7 +78,7 @@ impl BattleshipGame {
                     } else {
                         (row + i, col)
                     };
-                    if r >= BOARD_SIZE || c >= BOARD_SIZE {
+                    if r >= rows || c >= cols {
                         continue 'place;
                     }
                     if self.board[r][c] != Cell::Empty {
@@ -128,14 +133,22 @@ struct BattleshipApp {
     game: BattleshipGame,
     selected_row: usize,
     selected_col: usize,
+    input_rows: usize,
+    input_cols: usize,
+    awaiting_new_game: bool,
 }
 
 impl Default for BattleshipApp {
     fn default() -> Self {
+        let default_rows = 8;
+        let default_cols = 8;
         Self {
-            game: BattleshipGame::new(),
+            game: BattleshipGame::new(default_rows, default_cols),
             selected_row: 0,
             selected_col: 0,
+            input_rows: default_rows,
+            input_cols: default_cols,
+            awaiting_new_game: false,
         }
     }
 }
@@ -147,16 +160,29 @@ impl eframe::App for BattleshipApp {
             ui.label(&self.game.message);
             ui.separator();
 
+            // Always show board size controls and Start New Game button
+            ui.horizontal(|ui| {
+                ui.label("Rows:");
+                ui.add(egui::DragValue::new(&mut self.input_rows).clamp_range(4..=20));
+                ui.label("Columns:");
+                ui.add(egui::DragValue::new(&mut self.input_cols).clamp_range(4..=20));
+                if ui.button("Start New Game").clicked() {
+                    self.game = BattleshipGame::new(self.input_rows, self.input_cols);
+                    self.awaiting_new_game = false;
+                }
+            });
+            ui.separator();
+
             // Board display
             egui::Grid::new("board_grid").spacing([8.0, 8.0]).show(ui, |ui| {
                 ui.label("");
-                for col in 0..BOARD_SIZE {
+                for col in 0..self.game.cols {
                     ui.label(format!("{}", col + 1));
                 }
                 ui.end_row();
-                for row in 0..BOARD_SIZE {
+                for row in 0..self.game.rows {
                     ui.label(format!("{}", row + 1));
-                    for col in 0..BOARD_SIZE {
+                    for col in 0..self.game.cols {
                         let ch = match self.game.shots[row][col] {
                             Shot::Untargeted => " ",
                             Shot::Miss => "O",
@@ -181,7 +207,7 @@ impl eframe::App for BattleshipApp {
             ui.separator();
             if self.game.game_over {
                 if ui.button("Play Again").clicked() {
-                    self.game.start_game();
+                    self.awaiting_new_game = true;
                 }
             }
         });
