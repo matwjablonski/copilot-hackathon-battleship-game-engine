@@ -1,3 +1,6 @@
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Debug, serde::Serialize)]
 struct GameStats {
     turns: usize,
@@ -5,6 +8,14 @@ struct GameStats {
     misses: usize,
     ships_left: usize,
     total_ships: usize,
+}
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+impl BattleshipGame {
+    #[wasm_bindgen(js_name = gameStats)]
+    pub fn game_stats_js(&self) -> JsValue {
+        JsValue::from_serde(&self.game_stats()).unwrap()
+    }
 }
 
 use rand::seq::IndexedRandom;
@@ -170,6 +181,8 @@ struct BattleshipApp {
     input_rows: usize,
     input_cols: usize,
     awaiting_new_game: bool,
+    all_stats: Vec<GameStats>,
+    show_all_stats: bool,
 }
 
 impl Default for BattleshipApp {
@@ -183,6 +196,8 @@ impl Default for BattleshipApp {
             input_rows: default_rows,
             input_cols: default_cols,
             awaiting_new_game: false,
+            all_stats: Vec::new(),
+            show_all_stats: false,
         }
     }
 }
@@ -246,8 +261,23 @@ impl eframe::App for BattleshipApp {
 
             ui.separator();
             if self.game.game_over {
+                // Save stats if not already saved for this game
+                if self.all_stats.last().map_or(true, |s| s.turns != self.game.turns) {
+                    self.all_stats.push(self.game.game_stats());
+                }
                 if ui.button("Play Again").clicked() {
                     self.awaiting_new_game = true;
+                }
+            }
+
+            ui.separator();
+            if ui.button("Show All Session Stats").clicked() {
+                self.show_all_stats = !self.show_all_stats;
+            }
+            if self.show_all_stats {
+                ui.label("All Session Stats:");
+                for (i, stats) in self.all_stats.iter().enumerate() {
+                    ui.label(format!("Game {}: Turns: {} | Hits: {} | Misses: {} | Ships left: {}/{}", i+1, stats.turns, stats.hits, stats.misses, stats.ships_left, stats.total_ships));
                 }
             }
         });
